@@ -229,7 +229,6 @@
 		html += " &middot; <a href='byond://?src=\ref[src];AddComponent=\ref[D]'>Add Component</a>"
 		html += " &middot; <a href='byond://?src=\ref[src];RemoveComponent=\ref[D]'>Remove Component</a>"
 	html += "<br><a href='byond://?src=\ref[src];Delete=\ref[D]'>Delete</a>"
-	html += " &middot; <a href='byond://?src=\ref[src];HardDelete=\ref[D]'>Hard Delete</a>"
 	if (A || istype(D, /image))
 		html += " &middot; <a href='byond://?src=\ref[src];Display=\ref[D]'>Display In Chat</a>"
 		html += " &middot; <a href='byond://?src=\ref[src];DebugOverlays=\ref[D]'>Debug Overlays</a>"
@@ -606,15 +605,6 @@
 		else
 			audit(AUDIT_ACCESS_DENIED, "tried to delete something all rude-like.")
 		return
-	if (href_list["HardDelete"])
-		USR_ADMIN_ONLY
-		if(holder && src.holder.level >= LEVEL_PA)
-			var/datum/D = locate(href_list["HardDelete"])
-			if(alert(src, "Are you sure you want to delete [D] of type [D.type]?",,"Yes","No") == "Yes")
-				del(D)
-		else
-			audit(AUDIT_ACCESS_DENIED, "tried to delete something all rude-like.")
-		return
 	if (href_list["Display"])
 		USR_ADMIN_ONLY
 		if(holder && src.holder.level >= LEVEL_PA)
@@ -726,11 +716,21 @@
 	else
 		..()
 
+/// a list of things that no one has any business varediting ever
+#define VAREDIT_ABSOLUTELY_NOT_CHECK(D, var, value) (\
+	var == "holder" ||\
+	(var == "key" || var == "ckey") && istype(D, /client) ||\
+	istype(value, /datum/admins) ||\
+	istype(D, /datum/admins) ||\
+	value == logs ||\
+	value == logs["audit"]\
+)
+
 /client/proc/set_all(datum/D, variable, val)
 	if(!variable || !D || !(variable in D.vars))
 		return
 	#ifndef I_AM_HACKERMAN
-	if(variable == "holder")
+	if (VAREDIT_ABSOLUTELY_NOT_CHECK(D, variable, val))
 		boutput(src, "Access denied.")
 		return
 	#endif
@@ -767,7 +767,7 @@
 
 	var/var_value = D == "GLOB" ? global.vars[variable] : D.vars[variable]
 	#ifndef I_AM_HACKERMAN
-	if( istype(var_value, /datum/admins) || istype(D, /datum/admins) || var_value == logs || var_value == logs["audit"] )
+	if(VAREDIT_ABSOLUTELY_NOT_CHECK(D, variable, null))
 		src.audit(AUDIT_ACCESS_DENIED, "tried to assign a value to a forbidden variable.")
 		boutput(src, "You can't set that value.")
 		return
@@ -881,6 +881,8 @@
 		D.onVarChanged(variable, var_value, D.vars[variable])
 	if(src.refresh_varedit_onchange)
 		src.debug_variables(D)
+
+#undef VAREDIT_ABSOLUTELY_NOT_CHECK
 
 /mob/proc/Delete(atom/A in view())
 	set category = "Debug"

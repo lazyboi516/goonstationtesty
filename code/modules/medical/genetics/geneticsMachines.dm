@@ -323,7 +323,9 @@
 			. = TRUE
 			var/datum/geneticsResearchEntry/E = locate(params["ref"])
 			if (!research_sanity_check(E))
-				if (genResearch.addResearch(E))
+				if (E.isResearched)
+					scanner_alert(ui.user, "Research already in progress.", error = TRUE)
+				else if (genResearch.addResearch(E))
 					scanner_alert(ui.user, "Research initiated successfully.")
 				else
 					scanner_alert(ui.user, "Unable to begin research.", error = TRUE)
@@ -385,6 +387,10 @@
 		if("researchmut")
 			. = TRUE
 			var/datum/bioEffect/E = locate(params["ref"])
+			var/datum/bioEffect/GBE = GetBioeffectFromGlobalListByID(E.id)
+			if(GBE.research_level > EFFECT_RESEARCH_NONE)
+				scanner_alert(ui.user, "Research already in progress.", error = TRUE)
+				return
 			if (params["sample"])
 				if (bioEffect_sanity_check(E, 0))
 					return
@@ -557,7 +563,7 @@
 				var/datum/bioEffect/mutantrace = H.mutantrace.race_mutation
 				if (mutantrace && GetBioeffectResearchLevelFromGlobalListByID(initial(mutantrace.id)) >= EFFECT_RESEARCH_ACTIVATED)
 					addEffect = initial(mutantrace.id)
-			subject.bioHolder.RemoveAllEffects()
+			subject.bioHolder.RemoveAllEffects(null, TRUE)
 			subject.bioHolder.BuildEffectPool()
 			if (addEffect) // re-mutantify if we would have been able to anyway
 				subject.bioHolder.AddEffect(addEffect)
@@ -608,7 +614,7 @@
 				return
 			genResearch.researchMaterial -= price
 			var/booth_effect_cost = text2num_safe(params["price"])
-			booth_effect_cost = clamp(booth_effect_cost, 0, 999999)
+			booth_effect_cost = ceil(clamp(booth_effect_cost, 0, 999999))
 			var/booth_effect_desc = params["desc"]
 			booth_effect_desc = strip_html(booth_effect_desc, 280)
 			for_by_tcl(GB, /obj/machinery/genetics_booth)
@@ -682,7 +688,7 @@
 			qdel(E)
 			scanner_alert(ui.user, "Mutation deleted.")
 			on_ui_interacted(ui.user)
-		if("reclaim")
+		if("reclaimOccupant")
 			. = TRUE
 			var/datum/bioEffect/E = locate(params["ref"])
 			if (bioEffect_sanity_check(E))
@@ -691,6 +697,8 @@
 				return
 			var/mob/living/subject = get_scan_subject()
 			if (!subject)
+				return
+			if(!subject.bioHolder?.HasEffect(E.id))
 				return
 			var/reclamation_cap = genResearch.max_material * 1.5
 			on_ui_interacted(ui.user)
@@ -706,6 +714,29 @@
 				subject.bioHolder.RemoveEffect(E.id)
 				E.owner = null
 				E.holder = null
+				qdel(E)
+			playsound(src, 'sound/machines/pc_process.ogg', 50, TRUE)
+			src.equipment_cooldown(GENETICS_RECLAIMER, 600)
+		if("reclaimStored")
+			. = TRUE
+			var/datum/bioEffect/E = locate(params["ref"])
+			if (bioEffect_sanity_check(E))
+				return
+			if (!src.equipment_available("reclaimer", E))
+				return
+			if (!(E in saved_mutations))
+				return
+			var/reclamation_cap = genResearch.max_material * 1.5
+			on_ui_interacted(ui.user)
+			if (prob(E.reclaim_fail))
+				scanner_alert(ui.user, "Reclamation failed.", error = TRUE)
+			else
+				var/waste = min(E.reclaim_mats, (E.reclaim_mats + genResearch.researchMaterial) - reclamation_cap)
+				genResearch.researchMaterial = max(genResearch.researchMaterial, min(genResearch.researchMaterial + E.reclaim_mats, reclamation_cap))
+				if (waste > 0)
+					scanner_alert(ui.user, "Reclamation successful. [E.reclaim_mats] materials gained. Material count now at [genResearch.researchMaterial]. [waste] units of material wasted due to material capacity limit.")
+				else
+					scanner_alert(ui.user, "Reclamation successful. [E.reclaim_mats] materials gained. Material count now at [genResearch.researchMaterial].")
 				saved_mutations -= E
 				qdel(E)
 			playsound(src, 'sound/machines/pc_process.ogg', 50, TRUE)
@@ -1006,6 +1037,7 @@
 			if (GBE.secret && !genResearch.see_secret)
 				continue
 			.["subject"]["active"] += list(serialize_bioeffect_for_tgui(BE, active = TRUE, full_data=(BE == src.currently_browsing)))
+
 		if (src.modify_appearance)
 			.["modifyAppearance"] = src.modify_appearance.ui_data(user)
 		else
@@ -1076,18 +1108,19 @@
 		))
 
 /obj/machinery/computer/genetics/ui_static_data(mob/user)
-	. = list("research"=list(),
-					"boothCost" = genResearch.isResearched(/datum/geneticsResearchEntry/genebooth) ? genResearch.genebooth_cost : -1,
-					"injectorCost" = genResearch.isResearched(/datum/geneticsResearchEntry/injector) ? genResearch.injector_cost : -1,
-					"saveSlots" = genResearch.isResearched(/datum/geneticsResearchEntry/saver) ? genResearch.max_save_slots : 0,
-					"precisionEmitter" = genResearch.isResearched(/datum/geneticsResearchEntry/rad_precision),
-					"materialMax" = genResearch.max_material,
-					"mutantRaces" = list(list(
-						"name" = "Clear Mutantrace",
-						"icon" = "template",
-						"ref" = "\ref[null]",
-						)),
-					)
+	. = list(
+			"boothCost" = genResearch.isResearched(/datum/geneticsResearchEntry/genebooth) ? genResearch.genebooth_cost : -1,
+			"injectorCost" = genResearch.isResearched(/datum/geneticsResearchEntry/injector) ? genResearch.injector_cost : -1,
+			"saveSlots" = genResearch.isResearched(/datum/geneticsResearchEntry/saver) ? genResearch.max_save_slots : 0,
+			"precisionEmitter" = genResearch.isResearched(/datum/geneticsResearchEntry/rad_precision),
+			"materialMax" = genResearch.max_material,
+			"mutantRaces" = list(list(
+				"name" = "Clear Mutantrace",
+				"icon" = "template",
+				"ref" = "\ref[null]",
+				)
+			),
+		)
 
 	var/bioEffects = list()
 	for (var/id as anything in bioEffectList)
@@ -1104,6 +1137,7 @@
 			))
 	.["bioEffects"] = bioEffects
 
+	.["research"] = list()
 	for(var/key as anything in genResearch.researchTree)
 		var/datum/geneticsResearchEntry/R = genResearch.researchTree[key]
 
@@ -1118,7 +1152,7 @@
 /obj/machinery/computer/genetics/ui_interact(mob/user, datum/tgui/ui)
 	ui = tgui_process.try_update_ui(user, src, ui)
 	if(!ui)
-		ui = new(user, src, "GeneTek", "GeneTek Console v2.01")
+		ui = new(user, src, "GeneTek", "GeneTek Console v2.02")
 		ui.open()
 
 /obj/machinery/computer/genetics/ui_close(mob/user)

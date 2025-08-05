@@ -15,8 +15,9 @@
 	burn_output = 800
 	burn_possible = TRUE
 	health = 10
+	var/hide_underwear = FALSE
 	var/team_num
-	var/cutting_product
+	var/cutting_product = /obj/item/material_piece/cloth/cottonfabric
 
 	duration_remove = 7.5 SECONDS
 
@@ -28,11 +29,22 @@
 		setProperty("chemprot", 10)
 
 	attackby(obj/item/W, mob/user)
-		if (issnippingtool(W) && src.cutting_product)
+		if ((issnippingtool(W) || iscuttingtool(W)) && src.cutting_product)
 			if (istype(src.loc, /mob))
 				boutput(user, SPAN_ALERT("You can't cut that unless it's on a flat surface!"))
 				return
 			SETUP_GENERIC_ACTIONBAR(user, src, 0.5 SECOND, /obj/item/clothing/under/proc/cut_tha_crap, list(user), W.icon, W.icon_state, null, INTERRUPT_ACT | INTERRUPT_STUNNED | INTERRUPT_ACTION | INTERRUPT_MOVE)
+
+	equipped(mob/user, slot)
+		. = ..()
+		if(src.hide_underwear)
+			user.update_body()
+
+	unequipped(mob/user)
+		. = ..()
+		if(src.hide_underwear)
+			SPAWN(0) //uniform still counts as worn as unequipped() is called
+			user.update_body()
 
 	proc/cut_tha_crap(mob/user)
 		qdel(src)
@@ -209,11 +221,11 @@
 
 	gaymasc
 		name = "MLM pride jumpsuit"
-		desc = "A corporate token of inclusivity, made in a sweatshop. It's based off of vincian pride flag, but can be flipped inside-out to change it to the achillean one."
+		desc = "A corporate token of inclusivity, made in a sweatshop. It's based off of the vincian pride flag, but can be flipped inside-out to change it to the achillean one."
 		icon_state ="mlm"
 		item_state = "mlm"
 		var/isachily = FALSE
-		var/ach_descstate = "A corporate token of inclusivity, made in a sweatshop. It's based off of achillean pride flag, but can be flipped inside-out to change it to the vincian one."
+		var/ach_descstate = "A corporate token of inclusivity, made in a sweatshop. It's based off of the achillean pride flag, but can be flipped inside-out to change it to the vincian one."
 		cutting_product = /obj/item/flag/mlmvinc
 
 		attack_self(mob/user as mob)
@@ -269,7 +281,7 @@
 
 		New()
 			..()
-			options = icon_states(src.icon) // gonna assume that the dmi will only ever have pride jumpsuits
+			options = get_icon_states(src.icon) // gonna assume that the dmi will only ever have pride jumpsuits
 
 		attack_self(mob/user as mob)
 			if (src.options)
@@ -353,12 +365,25 @@ ABSTRACT_TYPE(/obj/item/clothing/under/rank)
 		icon_state = "hos-fancy-alt"
 		item_state = "hos-fancy-alt"
 
-/obj/item/clothing/under/misc/dirty_vest //HoS uniform from the Elite Security era
+/obj/item/clothing/under/misc/dirty_vest  //HoS uniform from the Elite Security era
 	name = "dirty vest"
 	desc = "This outfit has seen better days."
 	icon_state = "vest"
 	item_state = "vest"
 	c_flags = SLEEVELESS
+
+	blackpants
+		icon_state = "vestblack"
+		item_state = "vestblack"
+
+	bluepants
+		icon_state = "vestblue"
+		item_state = "vestblue"
+
+	brownpants
+		icon_state = "vestbrown"
+		item_state = "vestbrown"
+
 
 /obj/item/clothing/under/rank/chief_engineer
 	name = "chief engineer's uniform"
@@ -849,7 +874,7 @@ ABSTRACT_TYPE(/obj/item/clothing/under/misc)
 
 /obj/item/clothing/under/misc/chaplain/rasta
 	name = "rastafarian's shirt"
-	desc = "It's red, yellow and green. The colors of the Ethiopean national flag."
+	desc = "It's red, yellow and green. The colors of the Ethiopian national flag."
 	icon_state = "rasta"
 	item_state = "rasta"
 
@@ -992,6 +1017,7 @@ TYPEINFO(/obj/item/clothing/under/shorts/luchador)
 	inhand_image_icon = 'icons/mob/inhand/jumpsuit/hand_js_athletic.dmi'
 	icon_state = "fswimW"
 	item_state = "fswimW"
+	hide_underwear = TRUE
 
 	red
 		name = "red swimsuit"
@@ -1183,6 +1209,7 @@ ABSTRACT_TYPE(/obj/item/clothing/under/suit)
 	item_state = "suitG"
 
 /obj/item/clothing/under/suit/captain/blue
+	desc = "A blue suit and yellow necktie. Exemplifies authority."
 	icon_state = "suit-capB"
 	item_state = "suit-capB"
 
@@ -1543,7 +1570,7 @@ ABSTRACT_TYPE(/obj/item/clothing/under/gimmick)
 
 /obj/item/clothing/under/gimmick/jester
     name = "jester's outfit"
-    desc = "Outfit of a not-so-funny-clown."
+    desc = "Outfit of a not-so-funny clown."
     icon_state = "jester"
     item_state = "jester"
 
@@ -1589,11 +1616,97 @@ ABSTRACT_TYPE(/obj/item/clothing/under/gimmick)
     icon_state = "fish"
     item_state = "fish"
 
-/obj/item/clothing/under/misc/collar_pink
-    name = "pink collar shirt"
-    desc = "A plain pink collared shirt."
-    icon_state = "pink_collar"
-    item_state = "pink_collar"
+ABSTRACT_TYPE(/obj/item/clothing/under/misc/collar_shirt)
+/obj/item/clothing/under/misc/collar_shirt
+	name = "collar shirt"
+	icon_state = "collar_shirt-white"
+	item_state = "collar_shirt-white"
+	var/shirt_colour_name = "white"
+
+	New()
+		..()
+		src.name = "[src.shirt_colour_name] collar shirt"
+		src.desc = "A plain [src.shirt_colour_name] collared shirt."
+
+/obj/item/clothing/under/misc/collar_shirt/white
+	icon_state = "collar_shirt-white"
+	item_state = "collar_shirt-white"
+	shirt_colour_name = "white"
+
+/obj/item/clothing/under/misc/collar_shirt/cream
+	icon_state = "collar_shirt-cream"
+	item_state = "collar_shirt-cream"
+	shirt_colour_name = "cream"
+
+/obj/item/clothing/under/misc/collar_shirt/khaki
+	icon_state = "collar_shirt-khaki"
+	item_state = "collar_shirt-khaki"
+	shirt_colour_name = "khaki"
+
+/obj/item/clothing/under/misc/collar_shirt/pink
+	icon_state = "collar_shirt-pink"
+	item_state = "collar_shirt-pink"
+	shirt_colour_name = "pink"
+
+/obj/item/clothing/under/misc/collar_shirt/red
+	icon_state = "collar_shirt-red"
+	item_state = "collar_shirt-red"
+	shirt_colour_name = "red"
+
+/obj/item/clothing/under/misc/collar_shirt/dark_red
+	icon_state = "collar_shirt-dred"
+	item_state = "collar_shirt-dred"
+	shirt_colour_name = "dark red"
+
+/obj/item/clothing/under/misc/collar_shirt/orange
+	icon_state = "collar_shirt-orange"
+	item_state = "collar_shirt-orange"
+	shirt_colour_name = "orange"
+
+/obj/item/clothing/under/misc/collar_shirt/brown
+	icon_state = "collar_shirt-brown"
+	item_state = "collar_shirt-brown"
+	shirt_colour_name = "brown"
+
+/obj/item/clothing/under/misc/collar_shirt/yellow
+	icon_state = "collar_shirt-yellow"
+	item_state = "collar_shirt-yellow"
+	shirt_colour_name = "yellow"
+
+/obj/item/clothing/under/misc/collar_shirt/green
+	icon_state = "collar_shirt-green"
+	item_state = "collar_shirt-green"
+	shirt_colour_name = "green"
+
+/obj/item/clothing/under/misc/collar_shirt/dark_green
+	icon_state = "collar_shirt-dgreen"
+	item_state = "collar_shirt-dgreen"
+	shirt_colour_name = "dark green"
+
+/obj/item/clothing/under/misc/collar_shirt/mint
+	icon_state = "collar_shirt-mint"
+	item_state = "collar_shirt-mint"
+	shirt_colour_name = "mint"
+
+/obj/item/clothing/under/misc/collar_shirt/blue
+	icon_state = "collar_shirt-blue"
+	item_state = "collar_shirt-blue"
+	shirt_colour_name = "blue"
+
+/obj/item/clothing/under/misc/collar_shirt/dark_blue
+	icon_state = "collar_shirt-dblue"
+	item_state = "collar_shirt-dblue"
+	shirt_colour_name = "dark blue"
+
+/obj/item/clothing/under/misc/collar_shirt/purple
+	icon_state = "collar_shirt-purple"
+	item_state = "collar_shirt-purple"
+	shirt_colour_name = "purple"
+
+/obj/item/clothing/under/misc/collar_shirt/black
+	icon_state = "collar_shirt-black"
+	item_state = "collar_shirt-black"
+	shirt_colour_name = "black"
 
 /obj/item/clothing/under/misc/fancy_vest
     name = "fancy vest"
@@ -1621,7 +1734,7 @@ ABSTRACT_TYPE(/obj/item/clothing/under/gimmick)
 
 /obj/item/clothing/under/misc/tricolor
     name = "Tricolor Jumpsuit"
-    desc = "A jumpsuit that shows your serious about pizza."
+    desc = "A jumpsuit that shows you're serious about pizza."
     icon_state = "tricolor"
     item_state = "tricolor"
 
@@ -1865,6 +1978,7 @@ ABSTRACT_TYPE(/obj/item/clothing/under/gimmick)
 	desc = "Featuring a skirt over a skirt!"
 	icon_state = "westerndress"
 	item_state = "westerndress"
+	hide_underwear = TRUE
 
 //Crate Loot
 /obj/item/clothing/under/misc/tiedye
@@ -1884,6 +1998,429 @@ ABSTRACT_TYPE(/obj/item/clothing/under/gimmick)
     desc = "A shirt imbued with the color scheme of the scientifically best icecream flavor."
     icon_state = "mint_chip"
     item_state = "mint_chip"
+
+ABSTRACT_TYPE(/obj/item/clothing/under/misc/blouse_skirt)
+/obj/item/clothing/under/misc/blouse_skirt
+	name = "blouse and skirt"
+	desc = "A space rayon blouse with a pencil skirt. Professional."
+	icon_state = "blouse_skirt-white"
+	item_state = "blouse_skirt-white"
+
+/obj/item/clothing/under/misc/blouse_skirt/white
+	name = "white blouse and skirt"
+	icon_state = "blouse_skirt-white"
+	item_state = "blouse_skirt-white"
+
+/obj/item/clothing/under/misc/blouse_skirt/cream
+	name = "cream blouse and skirt"
+	icon_state = "blouse_skirt-cream"
+	item_state = "blouse_skirt-cream"
+
+/obj/item/clothing/under/misc/blouse_skirt/khaki
+	name = "khaki blouse and skirt"
+	icon_state = "blouse_skirt-khaki"
+	item_state = "blouse_skirt-khaki"
+
+/obj/item/clothing/under/misc/blouse_skirt/pink
+	name = "pink blouse and skirt"
+	icon_state = "blouse_skirt-pink"
+	item_state = "blouse_skirt-pink"
+
+/obj/item/clothing/under/misc/blouse_skirt/red
+	name = "red blouse and skirt"
+	icon_state = "blouse_skirt-red"
+	item_state = "blouse_skirt-red"
+
+/obj/item/clothing/under/misc/blouse_skirt/dark_red
+	name = "dark red blouse and skirt"
+	icon_state = "blouse_skirt-dred"
+	item_state = "blouse_skirt-dred"
+
+/obj/item/clothing/under/misc/blouse_skirt/orange
+	name = "orange blouse and skirt"
+	icon_state = "blouse_skirt-orange"
+	item_state = "blouse_skirt-orange"
+
+/obj/item/clothing/under/misc/blouse_skirt/brown
+	name = "brown blouse and skirt"
+	icon_state = "blouse_skirt-brown"
+	item_state = "blouse_skirt-brown"
+
+/obj/item/clothing/under/misc/blouse_skirt/yellow
+	name = "yellow blouse and skirt"
+	icon_state = "blouse_skirt-yellow"
+	item_state = "blouse_skirt-yellow"
+
+/obj/item/clothing/under/misc/blouse_skirt/green
+	name = "green blouse and skirt"
+	icon_state = "blouse_skirt-green"
+	item_state = "blouse_skirt-green"
+
+/obj/item/clothing/under/misc/blouse_skirt/dark_green
+	name = "dark green blouse and skirt"
+	icon_state = "blouse_skirt-dgreen"
+	item_state = "blouse_skirt-dgreen"
+
+/obj/item/clothing/under/misc/blouse_skirt/mint
+	name = "mint blouse and skirt"
+	icon_state = "blouse_skirt-mint"
+	item_state = "blouse_skirt-mint"
+
+/obj/item/clothing/under/misc/blouse_skirt/blue
+	name = "blue blouse and skirt"
+	icon_state = "blouse_skirt-blue"
+	item_state = "blouse_skirt-blue"
+
+/obj/item/clothing/under/misc/blouse_skirt/dark_blue
+	name = "navy blue blouse and skirt"
+	icon_state = "blouse_skirt-dblue"
+	item_state = "blouse_skirt-dblue"
+
+/obj/item/clothing/under/misc/blouse_skirt/purple
+	name = "purple blouse and skirt"
+	icon_state = "blouse_skirt-purple"
+	item_state = "blouse_skirt-purple"
+
+/obj/item/clothing/under/misc/blouse_skirt/black
+	name = "black blouse and skirt"
+	icon_state = "blouse_skirt-black"
+	item_state = "blouse_skirt-black"
+
+//Tea Party Dresses
+ABSTRACT_TYPE(/obj/item/clothing/under/misc/tea_party_dress)
+/obj/item/clothing/under/misc/tea_party_dress
+	name = "tea party dress"
+	desc = "An elegant, old-fashioned dress layered over a blouse."
+	icon_state = "tea_party_dress-pink"
+	item_state = "tea_party_dress-pink"
+
+/obj/item/clothing/under/misc/tea_party_dress/pink
+	name = "pink tea party dress"
+	icon_state = "tea_party_dress-pink"
+	item_state = "tea_party_dress-pink"
+
+/obj/item/clothing/under/misc/tea_party_dress/pink_and_black
+	name = "pink and black tea party dress"
+	icon_state = "tea_party_dress-pb"
+	item_state = "tea_party_dress-pb"
+
+/obj/item/clothing/under/misc/tea_party_dress/black_and_white
+	name = "black and white tea party dress"
+	icon_state = "tea_party_dress-bw"
+	item_state = "tea_party_dress-bw"
+
+/obj/item/clothing/under/misc/tea_party_dress/black
+	name = "black tea party dress"
+	icon_state = "tea_party_dress-black"
+	item_state = "tea_party_dress-black"
+
+/obj/item/clothing/under/misc/tea_party_dress/white
+	name = "white tea party dress"
+	icon_state = "tea_party_dress-white"
+	item_state = "tea_party_dress-white"
+
+/obj/item/clothing/under/misc/tea_party_dress/white_and_black
+	name = "white and black tea party dress"
+	icon_state = "tea_party_dress-wb"
+	item_state = "tea_party_dress-wb"
+
+/obj/item/clothing/under/misc/tea_party_dress/blue
+	name = "blue tea party dress"
+	icon_state = "tea_party_dress-blue"
+	item_state = "tea_party_dress-blue"
+
+/obj/item/clothing/under/misc/tea_party_dress/dark_blue
+	name = "dark blue tea party dress"
+	icon_state = "tea_party_dress-dblue"
+	item_state = "tea_party_dress-dblue"
+
+/obj/item/clothing/under/misc/tea_party_dress/light_blue
+	name = "light blue tea party dress"
+	icon_state = "tea_party_dress-lblue"
+	item_state = "tea_party_dress-lblue"
+
+/obj/item/clothing/under/misc/tea_party_dress/cyan
+	name = "cyan tea party dress"
+	icon_state = "tea_party_dress-cyan"
+	item_state = "tea_party_dress-cyan"
+
+/obj/item/clothing/under/misc/tea_party_dress/green
+	name = "green tea party dress"
+	icon_state = "tea_party_dress-green"
+	item_state = "tea_party_dress-green"
+
+/obj/item/clothing/under/misc/tea_party_dress/light_green
+	name = "light green tea party dress"
+	icon_state = "tea_party_dress-lgreen"
+	item_state = "tea_party_dress-lgreen"
+
+/obj/item/clothing/under/misc/tea_party_dress/orange
+	name = "orange tea party dress"
+	icon_state = "tea_party_dress-orange"
+	item_state = "tea_party_dress-orange"
+
+/obj/item/clothing/under/misc/tea_party_dress/red
+	name = "red tea party dress"
+	icon_state = "tea_party_dress-red"
+	item_state = "tea_party_dress-red"
+
+/obj/item/clothing/under/misc/tea_party_dress/yellow
+	name = "yellow tea party dress"
+	icon_state = "tea_party_dress-yellow"
+	item_state = "tea_party_dress-yellow"
+
+
+//Swimsuits, by RubberRats
+//Please don't wear a bikini as a work uniform on the RP servers, it would make me very unhappy.
+ABSTRACT_TYPE(/obj/item/clothing/under/misc/bikini)
+/obj/item/clothing/under/misc/bikini
+	name = "bikini"
+	icon_state = "bikini_w"
+	item_state = "bikini_w"
+	desc = "A stylish two-piece swimsuit. Well suited for a day at the beach, less so the cold depths of space."
+	hide_underwear = TRUE
+
+	white
+		name = "white bikini"
+		icon_state = "bikini_w"
+		item_state = "bikini_w"
+
+	yellow
+		name = "yellow bikini"
+		icon_state = "bikini_y"
+		item_state = "bikini_y"
+
+	red
+		name = "red bikini"
+		icon_state = "bikini_r"
+		item_state = "bikini_r"
+
+	blue
+		name = "blue bikini"
+		icon_state = "bikini_u"
+		item_state = "bikini_u"
+
+	pink
+		name = "pink bikini"
+		icon_state = "bikini_p"
+		item_state = "bikini_p"
+
+	black
+		name = "black bikini"
+		icon_state = "bikini_b"
+		item_state = "bikini_b"
+
+	pdot_red
+		name = "red polka-dot bikini"
+		icon_state = "bikini_pdotr"
+		item_state = "bikini_pdotr"
+
+	pdot_yellow
+		name = "yellow polka-dot bikini"
+		icon_state = "bikini_pdoty"
+		item_state = "bikini_pdoty"
+		desc = "An itsy-bisty, teeny-weeny swimsuit. What's it doing out here in space?"
+
+	strawberry
+		name = "strawberry bikini"
+		icon_state = "bikini_strawb"
+		item_state = "bikini_strawb"
+
+	bee
+		name = "beekini"
+		icon_state = "beekini"
+		item_state = "beekini"
+		desc = "A stylish two-piece swimsuit. It even has little wings! Aww."
+
+ABSTRACT_TYPE(/obj/item/clothing/under/misc/onepiece)
+/obj/item/clothing/under/misc/onepiece
+	name = "white one-piece swimsuit"
+	icon_state = "onepiece_w"
+	item_state = "onepiece_w"
+	desc = "A fashionable swimsuit. Well-suited for a day at the beach, less so the cold depths of space."
+	hide_underwear = TRUE
+
+	white
+		name = "white one-piece swimsuit"
+		icon_state = "onepiece_w"
+		item_state = "onepiece_w"
+
+	red
+		name = "red one-piece swimsuit"
+		icon_state = "onepiece_r"
+		item_state = "onepiece_r"
+
+	orange
+		name = "orange one-piece swimsuit"
+		icon_state = "onepiece_o"
+		item_state = "onepiece_o"
+
+	yellow
+		name = "yellow one-piece swimsuit"
+		icon_state = "onepiece_y"
+		item_state = "onepiece_y"
+
+	green
+		name = "green one-piece swimsuit"
+		icon_state = "onepiece_g"
+		item_state = "onepiece_g"
+
+	blue
+		name = "blue one-piece swimsuit"
+		icon_state = "onepiece_u"
+		item_state = "onepiece_u"
+
+	purple
+		name = "purple one-piece swimsuit"
+		icon_state = "onepiece_p"
+		item_state = "onepiece_p"
+
+	black
+		name = "black one-piece swimsuit"
+		icon_state = "onepiece_b"
+		item_state = "onepiece_b"
+
+ABSTRACT_TYPE(/obj/item/clothing/under/misc/frillyswimsuit)
+/obj/item/clothing/under/misc/frillyswimsuit
+	name = "frilly swimsuit"
+	icon_state = "frillyswimsuit_w"
+	item_state = "frillyswimsuit_w"
+	desc = "A playful swimsuit with a ruffled top. How did it get all the way out here?"
+	hide_underwear = TRUE
+
+	white
+		name = "frilly white swimsuit"
+		icon_state = "frillyswimsuit_w"
+		item_state = "frillyswimsuit_w"
+
+
+	yellow
+		name = "frilly yellow swimsuit"
+		icon_state = "frillyswimsuit_y"
+		item_state = "frillyswimsuit_y"
+
+	blue
+		name = "frilly blue swimsuit"
+		icon_state = "frillyswimsuit_u"
+		item_state = "frillyswimsuit_u"
+
+	pink
+		name = "frilly pink swimsuit"
+		icon_state = "frillyswimsuit_p"
+		item_state = "frillyswimsuit_p"
+
+	bubblegum
+		name = "frilly bubblegum swimsuit"
+		icon_state = "frillyswimsuit_pu"
+		item_state = "frillyswimsuit_pu"
+
+	circus
+		name = "frilly circus swimsuit"
+		icon_state = "frillyswimsuit_circus"
+		item_state = "frillyswimsuit_circus"
+		desc = "A playful swimsuit with a ruffled top. This one has an alarming polka-dot pattern."
+
+ABSTRACT_TYPE(/obj/item/clothing/under/misc/swimtrunks)
+/obj/item/clothing/under/misc/swimtrunks
+	name = "swim trunks"
+	icon_state = "swimtrunks_w"
+	item_state = "swimtrunks_w"
+	desc = "A pair of swim trunks. Well-suited for a day at the beach, less so the cold depths of space."
+
+	white
+		name = "white swim trunks"
+		icon_state = "swimtrunks_w"
+		item_state = "swimtrunks_w"
+
+	red
+		name = "red swim trunks"
+		icon_state = "swimtrunks_r"
+		item_state = "swimtrunks_r"
+
+	orange
+		name = "orange swim trunks"
+		icon_state = "swimtrunks_o"
+		item_state = "swimtrunks_o"
+
+	green
+		name = "green swim trunks"
+		icon_state = "swimtrunks_g"
+		item_state = "swimtrunks_g"
+
+	blue
+		name = "blue swim trunks"
+		icon_state = "swimtrunks_u"
+		item_state = "swimtrunks_u"
+
+	black
+		name = "black swim trunks"
+		icon_state = "swimtrunks_b"
+		item_state = "swimtrunks_b"
+
+	circus
+		name = "circus swim trunks"
+		icon_state = "swimtrunks_circus"
+		item_state = "swimtrunks_circus"
+		desc = "A pair of swim trunks. This one has an alarming polka-dot pattern."
+
+/obj/item/clothing/under/misc/wetsuit
+	name = "wetsuit"
+	icon_state = "wetsuit"
+	item_state = "wetsuit"
+	desc = "A skin-tight, flexible suit meant to keep divers warm underwater. Unfortunately, the material on this one is too thin to provide any real protection."
+
+	red
+		name = "red wetsuit"
+		icon_state = "wetsuit_r"
+		item_state = "wetsuit_r"
+
+	orange
+		name = "orange wetsuit"
+		icon_state = "wetsuit_o"
+		item_state = "wetsuit_o"
+
+	yellow
+		name = "yellow wetsuit"
+		icon_state = "wetsuit_y"
+		item_state = "wetsuit_y"
+
+	purple
+		name = "purple wetsuit"
+		icon_state = "wetsuit_pu"
+		item_state = "wetsuit_pu"
+
+	cyan
+		name = "cyan wetsuit"
+		icon_state = "wetsuit_u"
+		item_state = "wetsuit_u"
+
+	pink
+		name = "pink wetsuit"
+		icon_state = "wetsuit_p"
+		item_state = "wetsuit_p"
+
+ABSTRACT_TYPE(/obj/item/clothing/under/misc/oldswimsuit)
+/obj/item/clothing/under/misc/oldswimsuit
+	name = "old-timey swimsuit"
+	icon_state = "oldswimsuit_rw"
+	item_state = "oldswimsuit_rw"
+	desc = "A mildly tacky bathing suit in a style nearly 200 years old. Can't fault the classics."
+
+	red
+		icon_state = "oldswimsuit_rw"
+		item_state = "oldswimsuit_rw"
+
+	blue
+		icon_state = "oldswimsuit_uw"
+		item_state = "oldswimsuit_uw"
+
+	black
+		icon_state = "oldswimsuit_bw"
+		item_state = "oldswimsuit_bw"
+
+	bee
+		icon_state = "oldswimsuit_by"
+		item_state = "oldswimsuit_by"
 
 //Seasonal Stuff
 

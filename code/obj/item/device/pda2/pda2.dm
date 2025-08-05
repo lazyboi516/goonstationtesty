@@ -10,7 +10,6 @@
 	rand_pos = 0
 	c_flags = ONBELT
 	wear_layer = MOB_BELT_LAYER
-	force = 3
 	var/obj/item/card/id/ID_card = null // slap an ID card into that thang
 	var/datum/db_record/accessed_record = null // the bank account on the id card
 	var/obj/item/pen = null // slap a pen into that thang
@@ -65,7 +64,7 @@
 		// Other
 		MGO_STAFF, MGO_AI, MGO_SILICON, MGO_JANITOR, MGO_ENGINEER,
 		// Alerts
-		MGA_MAIL, MGA_RADIO, MGA_CHECKPOINT, MGA_ARREST, MGA_DEATH, MGA_MEDCRIT, MGA_CLONER, MGA_ENGINE, MGA_RKIT, MGA_SALES, MGA_SHIPPING, MGA_CARGOREQUEST, MGA_CRISIS, MGA_TRACKING,
+		MGA_MAIL, MGA_RADIO, MGA_CHECKPOINT, MGA_ARREST, MGA_DEATH, MGA_MEDCRIT, MGA_CLONER, MGA_ENGINE, MGA_RKIT, MGA_SALES, MGA_SHIPPING, MGA_CARGOREQUEST, MGA_CRISIS, MGA_TRACKING, MGA_SYNDICATE
 	)
 	var/alertgroups = list(MGA_MAIL, MGA_RADIO) // What mail groups that we're not a member of should we be able to mute?
 	var/bombproof = 0 // can't be destroyed with detomatix
@@ -220,7 +219,7 @@
 
 		robotics
 			name = "Robotics PDA"
-			mailgroups = list(MGD_MEDRESEACH,MGD_PARTY)
+			mailgroups = list(MGD_MEDRESEACH,MGD_PARTY, MGO_SILICON)
 			alertgroups = list(MGA_MAIL, MGA_RADIO, MGA_DEATH, MGA_MEDCRIT, MGA_CLONER, MGA_CRISIS, MGA_SALES)
 			default_muted_mailgroups = list(MGA_SALES)
 
@@ -311,13 +310,6 @@
 		mailgroups = list(MGO_ENGINEER,MGD_STATIONREPAIR,MGD_PARTY)
 		alertgroups = list(MGA_MAIL, MGA_RADIO, MGA_ENGINE, MGA_RKIT, MGA_CRISIS)
 
-	technical_assistant
-		name = "Technical Assistant PDA"
-		icon_state = "pda-e" //tech ass is too broad to have a set cartridge but should get alerts
-		mailgroups = list(MGD_STATIONREPAIR,MGD_PARTY)
-		setup_default_module = /obj/item/device/pda_module/tray
-		alertgroups = list(MGA_MAIL,MGA_RADIO)
-
 	mining
 		name = "Mining PDA"
 		icon_state = "pda-q"
@@ -349,6 +341,7 @@
 		name = "Military PDA"
 		desc = "A cheap knockoff looking portable microcomputer claiming to be made by ElecTek LTD. It has a slot for an ID card, and a hole to put a pen into."
 		setup_system_os_path = /datum/computer/file/pda_program/os/main_os/knockoff
+		mailgroups = list(MGA_SYNDICATE)
 		locked_bg_color = TRUE
 		bg_color = "#A33131"
 		r_tone = /datum/ringtone/basic/ring10
@@ -357,6 +350,7 @@
 
 		nuclear
 			owner = "John Doe"
+			setup_system_os_path = /datum/computer/file/pda_program/os/main_os/knockoff/mess_off
 			setup_default_cartridge = /obj/item/disk/data/cartridge/nuclear
 
 			New()
@@ -601,7 +595,7 @@
 					dat += "<center><font color=red>Fatal Error 0x17<br>"
 					dat += "No System Software Loaded</font></center>"
 
-		user << output(dat, "pda2_\ref[src].texto")
+		user.Browse(dat, "window=pda2_\ref[src].texto")
 
 
 	winshow(user,"pda2_\ref[src]",1)
@@ -711,14 +705,7 @@
 				src.insert_id_card(ID, user)
 				boutput(user, SPAN_NOTICE("You insert [ID] into [src]."))
 
-	else if (istype(C, /obj/item/uplink_telecrystal))
-		if (src.uplink && src.uplink.active)
-			var/crystal_amount = C.amount
-			src.uplink.uses = src.uplink.uses + crystal_amount
-			boutput(user, "You insert [crystal_amount] [syndicate_currency] into the [src].")
-			qdel(C)
-
-	else if (istype(C, /obj/item/explosive_uplink_telecrystal))
+	else if (istype(C, /obj/item/uplink_telecrystal/trick))
 		if (src.uplink && src.uplink.active)
 			boutput(user, SPAN_ALERT("The [C] explodes!"))
 			var/turf/T = get_turf(C.loc)
@@ -726,6 +713,13 @@
 				T.hotspot_expose(700,125)
 				explosion(C, T, -1, -1, 2, 3) //about equal to a PDA bomb
 			C.set_loc(user.loc)
+			qdel(C)
+
+	else if (istype(C, /obj/item/uplink_telecrystal))
+		if (src.uplink && src.uplink.active)
+			var/crystal_amount = C.amount
+			src.uplink.uses = src.uplink.uses + crystal_amount
+			boutput(user, "You insert [crystal_amount] [syndicate_currency] into the [src].")
 			qdel(C)
 
 	else if (istype(C, /obj/item/pen) || istype(C, /obj/item/clothing/mask/cigarette) || istype(C, /obj/item/device/light/flashlight/penlight))
@@ -736,6 +730,9 @@
 
 	else if (istype(C, /obj/item/currency/spacecash))
 		src.insert_cash(C, user)
+
+	else if (istype(C, /obj/item/currency/buttcoin))
+		src.insert_buttcoin(C, user)
 
 /obj/item/device/pda2/examine()
 	. = ..()
@@ -928,6 +925,21 @@
 			cash.amount = 0
 			qdel(cash)
 			playsound(src.loc, 'sound/machines/paper_shredder.ogg', 50, 1)
+			src.updateSelfDialog()
+		else
+			if (src.ID_card && !src.accessed_record)
+				boutput(user, SPAN_ALERT("\The [src] refuses your [cash]. The inserted ID card doesn't have a bank account associated with it."))
+			else if (!src.ID_card)
+				boutput(user, SPAN_ALERT("\The [src] refuses your [cash]. There is no ID card inserted."))
+		return
+
+	proc/insert_buttcoin(obj/item/currency/buttcoin/cash, mob/user)
+		if (src.ID_card && src.accessed_record)
+			boutput(user, SPAN_NOTICE("You force [cash] into \the [src]."))
+			boutput(user, SPAN_SUCCESS("Your transaction will complete anywhere within 10 to 10e27 minutes from now."))
+			cash.amount = 0
+			qdel(cash)
+			playsound(src.loc, 'sound/machines/mixer.ogg', 50, 1)
 			src.updateSelfDialog()
 		else
 			if (src.ID_card && !src.accessed_record)

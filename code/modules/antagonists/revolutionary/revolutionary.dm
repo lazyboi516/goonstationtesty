@@ -5,6 +5,7 @@
 	antagonist_panel_tab_type = /datum/antagonist_panel_tab/bundled/revolution
 	succinct_end_of_round_antagonist_entry = TRUE
 	remove_on_death = TRUE
+	wiki_link = "https://wiki.ss13.co/Revolutionary"
 
 	New()
 		. = ..()
@@ -61,12 +62,6 @@
 		src.owner.current.visible_message(SPAN_NOTICE("<b>[src.owner.current] looks like they just remembered their real allegiance!</b>"), SPAN_NOTICE("<b>You remember your real allegiance!</b>"))
 		src.owner.current.show_text("<h4>Protect the Heads of Staff and help them kill the leaders of the revolution.</h4>", "blue")
 		src.owner.current.show_antag_popup("derevved")
-
-	do_popup(override)
-		if (!override)
-			override = "revved"
-
-		..(override)
 
 	check_success()
 		var/list/heads_of_staff = ticker?.mode?.get_living_heads()

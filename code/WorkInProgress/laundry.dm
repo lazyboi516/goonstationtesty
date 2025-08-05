@@ -22,6 +22,7 @@ TYPEINFO(/obj/submachine/laundry_machine)
 	var/cycle_current = 0
 	var/cycle_max = CYCLE_TIME
 	var/mob/occupant = null
+	var/mob/activator = null
 	var/image/image_door = null
 	var/image/image_light = null
 	//var/image/image_panel = null
@@ -33,6 +34,12 @@ TYPEINFO(/obj/submachine/laundry_machine)
 /obj/submachine/laundry_machine/New()
 	..()
 	src.UpdateIcon()
+
+/obj/submachine/laundry_machine/disposing()
+	src.unload()
+	src.activator = null
+	src.occupant = null
+	..()
 
 /obj/submachine/laundry_machine/update_icon()
 	ENSURE_IMAGE(src.image_door, src.icon, "laundry[src.open]")
@@ -71,8 +78,8 @@ TYPEINFO(/obj/submachine/laundry_machine)
 			for (var/obj/item/I in src.contents)
 				if (istype(I, /obj/item/clothing))
 					var/obj/item/clothing/C = I
-					C.stains = list("damp")
-					C.UpdateName()
+					C.clean_stains()
+					C.add_stain(/datum/stain/damp)
 				I.clean_forensic()
 			if (src.occupant && ishuman(src.occupant))
 				H.sims?.affectMotive("Hygiene", 100)
@@ -87,7 +94,7 @@ TYPEINFO(/obj/submachine/laundry_machine)
 			for (var/obj/item/item in src.contents)
 				if (istype(item, /obj/item/clothing))
 					var/obj/item/clothing/clothing = item
-					clothing.stains = null
+					clothing.clean_stains()
 					clothing.delStatus("freshly_laundered") // ...and this is the price we pay for being cheeky
 					clothing.changeStatus("freshly_laundered", rand(2,4) MINUTES)
 					clothing.UpdateName()
@@ -101,6 +108,11 @@ TYPEINFO(/obj/submachine/laundry_machine)
 						var/obj/item/currency/spacecash/newcash = cash.split_stack(amount)
 						newcash.changeStatus("freshly_laundered", INFINITE_STATUS)
 						newcash.set_loc(src)
+					//Money laundering is a crime!
+					var/mob/living/carbon/human/criminal = src.activator
+					if(criminal)
+						criminal.apply_automated_arrest("Money laundering.")
+			src.activator = null
 			src.cycle = POST
 			src.cycle_current = 0
 			src.visible_message("[src] lets out a happy beep!")
@@ -176,7 +188,14 @@ TYPEINFO(/obj/submachine/laundry_machine)
 	while (src.cycle == WASH || src.cycle == DRY)
 		animate_storage_thump(src, 11)
 		if (prob(50))
-			step(src, pick(cardinal))
+			var/dir = pick(cardinal)
+			for (var/mob/living/M in get_step(src, dir))
+				if (!isintangible(M))
+					random_brute_damage(M, 5)
+					M.setStatus("knockdown", 2 SECONDS)
+					M.force_laydown_standup()
+					M.throw_at(get_steps(src, dir, 5), 5, 1, null, get_turf(src))
+			step(src, dir)
 			src.visible_message(SPAN_ALERT("[src] [pick("rattles", "shudders", "judders", "complains", "grumps")]"), group = "angry_laundry")
 		if (prob(1))
 			if (prob(20))
@@ -231,6 +250,35 @@ TYPEINFO(/obj/submachine/laundry_machine)
 				SETUP_GENERIC_ACTIONBAR(user, src, 4 SECONDS, /obj/submachine/laundry_machine/proc/force_into_machine, list(G, user), 'icons/mob/screen1.dmi', "grabbed", null, null) //Sounds about right since it's a lengthy stun afterwards
 	else
 		return ..()
+
+/obj/submachine/laundry_machine/hitby(atom/movable/MO, datum/thrown_thing/thr)
+	if (istype(MO, /mob/living))
+		if (src.open)
+			var/mob/living/M = MO
+			M.visible_message(SPAN_ALERT("<B>[M] gets tossed into the washing machine!</B>"))
+			logTheThing(LOG_COMBAT, M, "is thrown into a [src.name] at [log_loc(src)].")
+			M.set_loc(src)
+			M.changeStatus("knockdown", 1.5 SECONDS)
+			src.occupant = M
+			src.open = 0
+			src.cycle = PRE
+			cycle_max = CYCLE_TIME_MOB_INSIDE
+			if (!processing_items.Find(src))
+				processing_items.Add(src)
+			UpdateIcon()
+	else
+		return ..()
+
+/obj/submachine/laundry_machine/relaymove(mob/user as mob)
+	if (src.occupant == user && !src.on)
+		if (!can_act(user))
+			return
+		user.set_loc(src.loc)
+		src.occupant = null
+		src.open = 1
+		src.UpdateIcon()
+		cycle_max = CYCLE_TIME
+		playsound(src, 'sound/machines/click.ogg', 50)
 
 /obj/submachine/laundry_machine/attack_hand(mob/user)
 	if (!can_act(user))
@@ -313,15 +361,17 @@ TYPEINFO(/obj/submachine/laundry_machine)
 					src.unload()
 					src.cycle = PRE
 		if("cycle")
-			if (!occupant) //You cant turn it on or off if someone is inside to prevent people getting stuck inside
-				src.on = !src.on
-				. = TRUE
-				src.visible_message("[usr] switches [src] [src.on ? "on" : "off"].")
-				if (src.on)
-					src.cycle = PRE
-					src.open = 0
-					if (!(src in processing_items))
-						processing_items.Add(src)
+			if (src.occupant)
+				src.cycle_max = CYCLE_TIME_MOB_INSIDE
+			src.on = !src.on
+			. = TRUE
+			src.visible_message("[usr] switches [src] [src.on ? "on" : "off"].")
+			src.activator = usr
+			if (src.on)
+				src.cycle = PRE
+				src.open = 0
+				if (!(src in processing_items))
+					processing_items.Add(src)
 	src.UpdateIcon()
 
 /obj/submachine/laundry_machine/Click(location, control, params)

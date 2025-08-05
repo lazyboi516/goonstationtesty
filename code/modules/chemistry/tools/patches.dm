@@ -342,14 +342,14 @@
 /* =================================================== */
 
 /obj/item/reagent_containers/patch/mini/bruise
-	name = "healing mini-patch"
-	desc = "Heals brute damage wounding."
+	name = "brute mini-patch"
+	desc = "Heals small brute wounds."
 	medical = 1
 	initial_reagents = "styptic_powder"
 
 /obj/item/reagent_containers/patch/mini/burn
 	name = "burn mini-patch"
-	desc = "Heals burn damage wounding."
+	desc = "Heals small burn wounds."
 	medical = 1
 	initial_reagents = "silver_sulfadiazine"
 
@@ -477,7 +477,7 @@ TYPEINFO(/obj/item/reagent_containers/mender)
 
 	on_reagent_change(add)
 		..()
-		if (src.reagents)
+		if (src.reagents && (src.reagents.total_temperature > 330 || src.reagents.total_temperature < 270))
 			src.reagents.temperature_cap = 330
 			src.reagents.temperature_min = 270
 			src.reagents.temperature_reagents(change_min = 0, change_cap = 0)

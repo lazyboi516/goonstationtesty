@@ -44,7 +44,11 @@ var/list/area/blacklist_flora_gen = list(/area/shuttle, /area/mining)
 
 	// Skip areas where flora generation can be problematic due to introduction of dense anchored objects
 	if((gen_turf.z == Z_LEVEL_STATION || isgenplanet(gen_turf)) && ((flags & MAPGEN_IGNORE_BUILDABLE) == 0))
-		gen_turf.AddComponent(/datum/component/buildable_turf)
+		gen_turf.can_build = TRUE
+		var/turf/unsimulated/T = gen_turf
+		if(istype(T))
+			T.can_replace_with_stuff = TRUE
+
 
 		for(var/bad_area in blacklist_flora_gen)
 			if(istype(gen_turf.loc, bad_area))
@@ -92,13 +96,20 @@ var/list/area/blacklist_flora_gen = list(/area/shuttle, /area/mining)
 	flora_types = list(/obj/stone/snow/random = 100, /obj/stone/random = 20, /obj/fakeobject/smallrocks = 20)
 	flora_density = 5
 
+	fauna_types = list(/mob/living/critter/small_animal/bunny/hare=5, /mob/living/critter/small_animal/goat=1)
+	fauna_density = 0.05
+
 /datum/biome/snow/forest
 	flora_types = list(/obj/tree/snow_random = 50, /obj/shrub/snow/random{last_use=INFINITY} = 100, /obj/stone/snow/random = 10, /obj/fakeobject/smallrocks = 5)
 	flora_density = 20
 
+	fauna_density = 0.1
+	minimum_fauna_distance = 10
+
 /datum/biome/snow/forest/thick
 	flora_density = 30
 
+	fauna_types = list(/mob/living/critter/small_animal/bunny/hare=25, /mob/living/critter/small_animal/jackalope=1)
 	fauna_density = 0.2
 	minimum_fauna_distance = 10
 
@@ -107,6 +118,7 @@ var/list/area/blacklist_flora_gen = list(/area/shuttle, /area/mining)
 	flora_types = list(/obj/stone/snow/random = 100, /obj/fakeobject/smallrocks = 50, /obj/stone/random = 5)
 	flora_density = 3
 
+	fauna_types = list(/mob/living/critter/small_animal/bunny/hare=15, /mob/living/critter/small_animal/goat=1)
 	fauna_density = 0.2
 	minimum_fauna_distance = 20
 
@@ -117,7 +129,7 @@ var/list/area/blacklist_flora_gen = list(/area/shuttle, /area/mining)
 
 /datum/biome/forest
 	turf_type = /turf/unsimulated/floor/grasslush/thin
-	flora_types = list(/obj/tree{layer = EFFECTS_LAYER_UNDER_1} = 75, /obj/tree/elm_random=1, /obj/shrub/random{last_use=INFINITY} = 50)
+	flora_types = list(/obj/tree{layer = EFFECTS_LAYER_UNDER_1} = 55, /obj/tree/elm_random=1, /obj/shrub/random{last_use=INFINITY} = 50)
 	flora_density = 20
 	minimum_flora_distance = 2
 
@@ -177,8 +189,14 @@ var/list/area/blacklist_flora_gen = list(/area/shuttle, /area/mining)
 /datum/biome/water/ice
 	turf_type = /turf/unsimulated/floor/auto/water/ice
 
+	fauna_types = list(/mob/living/critter/small_animal/seal_arctic/baby=1, /mob/living/critter/small_animal/seal_arctic/adult=5)
+	fauna_density = 0.2
+
 /datum/biome/water/ice/rough
 	turf_type = /turf/unsimulated/floor/auto/water/ice/rough
+
+	fauna_density = 0.5
+
 
 /datum/biome/mountain
 	turf_type = /turf/simulated/wall/auto/asteroid/mountain

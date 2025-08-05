@@ -39,13 +39,8 @@ TYPEINFO(/atom)
 	/// Should points thrown at this take into account the click pixel value
 	var/pixel_point = FALSE
 
-	/// If hear_talk is triggered on this object, make my contents hear_talk as well
-	var/open_to_sound = 0
-
 	var/interesting = ""
 	var/stops_space_move = 0
-	/// Anything can speak... if it can speak
-	var/obj/chat_maptext_holder/chat_text
 
 	/// A multiplier that changes how an atom stands up from resting. Yes.
 	var/rest_mult = 0
@@ -87,6 +82,11 @@ TYPEINFO(/atom)
 	/// Whether the last material applied updated appearance. Used for re-applying material appearance on icon update
 	var/material_applied_appearance = FALSE
 
+	/// What icon to use if we want to create specific particles when hit by a projectile
+	var/impact_icon = null
+	/// What icon state to use if we want to create specific particles when hit by a projectile
+	var/impact_icon_state = null
+
 	New(turf/newLoc)
 		. = ..()
 		// Lets stop having 5 implementations of this that all do it differently
@@ -123,7 +123,7 @@ TYPEINFO(/atom)
 		if (istext(text_to_add) && length(text_to_add) && islist(src.name_suffixes))
 			if (length(src.name_suffixes) >= src.num_allowed_suffixes)
 				src.remove_suffixes(1)
-			src.name_suffixes += strip_html(text_to_add)
+			src.name_suffixes += strip_html_tags(text_to_add)
 		if (return_suffixes)
 			var/amt_suffixes = 0
 			for (var/i in src.name_suffixes)
@@ -191,16 +191,13 @@ TYPEINFO(/atom)
 
 		fingerprints_full = null
 		tag = null
+		src.forensic_holder = null
 
 		if(length(src.statusEffects))
 			for(var/datum/statusEffect/effect as anything in src.statusEffects)
 				src.delStatus(effect)
 			src.statusEffects = null
 		ClearAllParticles()
-
-		if (!isnull(chat_text))
-			qdel(chat_text)
-			chat_text = null
 
 		atom_properties = null
 		if(!ismob(src)) // I want centcom cloner to look good, sue me
@@ -345,6 +342,7 @@ TYPEINFO(/atom)
 /atom/Cross(atom/movable/mover)
 	return (!density)
 
+/// called when atom AM crosses onto where this atom is
 /atom/Crossed(atom/movable/AM)
 	SHOULD_CALL_PARENT(TRUE)
 	#ifdef SPACEMAN_DMM // idk a tiny optimization to omit the parent call here, I don't think it actually breaks anything in byond internals
@@ -352,6 +350,7 @@ TYPEINFO(/atom)
 	#endif
 	SEND_SIGNAL(src, COMSIG_ATOM_CROSSED, AM)
 
+/// called when atom AM enters the contents of this atom
 /atom/Entered(atom/movable/AM, atom/OldLoc)
 	SHOULD_CALL_PARENT(TRUE)
 	#ifdef SPACEMAN_DMM //im cargo culter
@@ -359,6 +358,7 @@ TYPEINFO(/atom)
 	#endif
 	SEND_SIGNAL(src, COMSIG_ATOM_ENTERED, AM, OldLoc)
 
+/// called when atom AM uncrosses where this atom is
 /atom/Uncrossed(atom/movable/AM)
 	SHOULD_CALL_PARENT(TRUE)
 	#ifdef SPACEMAN_DMM //im also cargo culter
@@ -366,11 +366,10 @@ TYPEINFO(/atom)
 	#endif
 	SEND_SIGNAL(src, COMSIG_ATOM_UNCROSSED, AM)
 
-/atom/proc/ProximityLeave(atom/movable/AM as mob|obj)
+/atom/proc/ProximityLeave(atom/movable/AM)
 	return
 
-//atom.event_handler_flags & USE_PROXIMITY MUST EVALUATE AS TRUE OR THIS PROC WONT BE CALLED
-/atom/proc/HasProximity(atom/movable/AM as mob|obj)
+/atom/proc/EnteredProximity(atom/movable/AM)
 	return
 
 /atom/proc/EnteredFluid(obj/fluid/F as obj, atom/oldloc)
@@ -476,6 +475,11 @@ TYPEINFO(/atom/movable)
 	/// See `/datum/manufacturing_requirement/match_property` for match properties
 	var/list/mats = null
 
+	/// Dummy proc for all /atom/movable typeinfos to be overriden and called to see
+	/// if an object type can be built somewhere, before instantiating the object itself.
+	proc/can_build(turf/T)
+		return TRUE
+
 /atom/movable
 	layer = OBJ_LAYER
 	var/tmp/turf/last_turf = 0
@@ -522,12 +526,10 @@ TYPEINFO(/atom/movable)
 		src.AddComponent(/datum/component/analyzable, !isnull(src.mechanics_type_override) ? src.mechanics_type_override : src.type)
 	src.last_turf = isturf(src.loc) ? src.loc : null
 	//hey this is mbc, there is probably a faster way to do this but i couldnt figure it out yet
+	if(istype(src, /atom/movable/hotspot)) //hotspots arent really tangible things
+		return
 	if (isturf(src.loc))
 		var/turf/T = src.loc
-		if (src.event_handler_flags & USE_PROXIMITY)
-			T.checkinghasproximity++
-			for (var/turf/T2 in range(1, T))
-				T2.neighcheckinghasproximity++
 		if(src.opacity)
 			T.opaque_atom_count++
 		if(src.pass_unstable || src.density)
@@ -544,10 +546,6 @@ TYPEINFO(/atom/movable)
 
 
 /atom/movable/disposing()
-	if (temp_flags & MANTA_PUSHING)
-		mantaPushList.Remove(src)
-		temp_flags &= ~MANTA_PUSHING
-
 	if (temp_flags & SPACE_PUSHING)
 		EndSpacePush(src)
 
@@ -563,7 +561,7 @@ TYPEINFO(/atom/movable)
 
 /atom/movable/Move(atom/NewLoc, direct)
 	SHOULD_CALL_PARENT(TRUE)
-	if(SEND_SIGNAL(src, COMSIG_MOVABLE_BLOCK_MOVE, NewLoc, direct))
+	if(SEND_SIGNAL(src, COMSIG_MOVABLE_PRE_MOVE, NewLoc, direct))
 		return
 	#ifdef CHECK_MORE_RUNTIMES
 	if(!istype(src.loc, /turf) || !istype(NewLoc, /turf))
@@ -655,20 +653,11 @@ TYPEINFO(/atom/movable)
 			for(var/turf/covered_turf as anything in old_locs)
 				covered_turf.pass_unstable -= src.pass_unstable
 				covered_turf.passability_cache = null
-		if (src.event_handler_flags & USE_PROXIMITY)
-			last_turf.checkinghasproximity = max(last_turf.checkinghasproximity-1, 0)
-			for (var/turf/T2 in range(1, last_turf))
-				T2.neighcheckinghasproximity--
 	if(isturf(src.loc))
-		var/turf/T = src.loc
 		if(src.pass_unstable || src.density)
 			for(var/turf/covered_turf as anything in src.locs)
 				covered_turf.pass_unstable += src.pass_unstable
 				covered_turf.passability_cache = null
-		if (src.event_handler_flags & USE_PROXIMITY)
-			T.checkinghasproximity++
-			for (var/turf/T2 in range(1, T))
-				T2.neighcheckinghasproximity++
 
 	last_turf = isturf(src.loc) ? src.loc : null
 
@@ -720,6 +709,7 @@ TYPEINFO(/atom/movable)
 		user.set_pulling(src)
 
 		SEND_SIGNAL(user, COMSIG_MOB_TRIGGER_THREAT)
+		SEND_SIGNAL(src, COMSIG_MOB_PULL_TRIGGER, user)
 
 /atom/movable/set_dir(new_dir)
 	..()
@@ -837,12 +827,14 @@ TYPEINFO(/atom/movable)
 	PROTECTED_PROC(TRUE)
 	return
 
+///wrapper proc for /atom/proc/attack_hand so that signals are always sent. Call this, but do not override it.
 /atom/proc/Attackhand(mob/user as mob)
 	SHOULD_NOT_OVERRIDE(1)
 	if(SEND_SIGNAL(src, COMSIG_ATTACKHAND, user))
 		return
 	src.attack_hand(user)
 
+///internal proc for when an atom is attacked by a user's hand. Override this, but do not call it,
 /atom/proc/attack_hand(mob/user)
 	PROTECTED_PROC(TRUE)
 	src.storage?.storage_item_attack_hand(user)
@@ -972,6 +964,10 @@ TYPEINFO(/atom/movable)
 	SHOULD_NOT_OVERRIDE(TRUE)
 	if(!isatom(over_object))
 		return
+	// it can be useful for subsequent procs that receive params to know they are the result of a click-drag
+	if (isnull(params) || params == "") params = "dragged=1"
+	else params += ";dragged=1"
+
 	if (ismovable(src) && isobserver(usr) && usr.client?.holder?.ghost_interaction)
 		var/atom/movable/movablesrc = src
 		var/list/params_list = params2list(params)
@@ -995,6 +991,10 @@ TYPEINFO(/atom/movable)
 		return // Stops ghost drones from MouseDropping mobs
 	if (isAIeye(usr) || (isobserver(usr) && src != usr))
 		return // Stops AI eyes from click-dragging anything, and observers from click-dragging anything that isn't themselves (ugh)
+
+	// converting params to a list here enables it to be used for communicating between mousedrop() and MouseDrop_T()
+	params = params2list(params)
+
 	over_object._MouseDrop_T(src, usr, src_location, over_location, src_control, over_control, params)
 	if (SEND_SIGNAL(src, COMSIG_ATOM_MOUSEDROP, usr, over_object, src_location, over_location, src_control, over_control, params))
 		return
@@ -1015,15 +1015,17 @@ TYPEINFO(/atom/movable)
 /atom/proc/on_reagent_transfer()
 	return
 
+/// called when this atom is bumped by the argument
 /atom/proc/Bumped(AM as mob|obj)
 	SHOULD_NOT_SLEEP(TRUE)
 	return
 
-/// override this instead of Bump
+/// override this instead of Bump. called when this atom bumps the argument.
 /atom/movable/proc/bump(atom/A)
 	SHOULD_NOT_SLEEP(TRUE)
 	return
 
+/// -- do not override, override /atom/movable/bump instead --. called when this atom bumps the argument
 /atom/movable/Bump(var/atom/A as mob|obj|turf|area)
 	SHOULD_NOT_OVERRIDE(TRUE)
 	if(!(A.flags & ON_BORDER))
@@ -1126,18 +1128,6 @@ TYPEINFO(/atom/movable)
 	if (islist(src.attached_objs) && length(attached_objs))
 		for (var/atom/movable/M in src.attached_objs)
 			M.set_loc(src.loc)
-
-	if (isturf(last_turf) && (src.event_handler_flags & USE_PROXIMITY))
-		last_turf.checkinghasproximity = max(last_turf.checkinghasproximity-1, 0)
-		for (var/turf/T2 in range(1, last_turf))
-			T2.neighcheckinghasproximity--
-
-	if (isturf(src.loc))
-		last_turf = src.loc
-		if (src.event_handler_flags & USE_PROXIMITY)
-			last_turf.checkinghasproximity++
-			for (var/turf/T2 in range(1, last_turf))
-				T2.neighcheckinghasproximity++
 	else
 		last_turf = null
 
@@ -1252,28 +1242,10 @@ TYPEINFO(/atom/movable)
 /// Does x cold damage to the atom
 /atom/proc/damage_cold(amount)
 
-// Setup USE_PROXIMITY turfs
-/atom/proc/setup_use_proximity()
-	src.event_handler_flags |= USE_PROXIMITY
-	if (isturf(src.loc))
-		var/turf/T = src.loc
-		T.checkinghasproximity++
-		for (var/turf/T2 in range(1, T))
-			T2.neighcheckinghasproximity++
-
-/atom/proc/remove_use_proximity()
-	src.event_handler_flags = src.event_handler_flags & ~USE_PROXIMITY
-	if (isturf(src.loc))
-		var/turf/T = src.loc
-		if (T.checkinghasproximity > 0)
-			T.checkinghasproximity--
-		for (var/turf/T2 in range(1, T))
-			if (T2.neighcheckinghasproximity > 0)
-				T2.neighcheckinghasproximity--
 
 // auto-connecting sprites
 /// Check a turf and its contents to see if they're a valid auto-connection target
-/atom/proc/should_auto_connect(turf/T, connect_to = list(), list/exceptions = list(), cross_areas = TRUE)
+/atom/proc/should_auto_connect(turf/T, connect_to = list(), list/exceptions = list(), cross_areas = TRUE, turf_only = FALSE)
 	if (!T) // nothing to connect to
 		return FALSE
 	if (!cross_areas && (get_area(T) != get_area(src))) // don't connect across areas
@@ -1284,11 +1256,12 @@ TYPEINFO(/atom/movable)
 		return TRUE
 
 	// slow 😩
-	for (var/atom/movable/AM in T)
-		if (!AM.anchored)
-			continue
-		if (connect_to[AM.type] && !exceptions[AM.type])
-			return TRUE
+	if(!turf_only)
+		for (var/atom/movable/AM as anything in T)
+			if (!AM.anchored)
+				continue
+			if (connect_to[AM.type] && !exceptions[AM.type])
+				return TRUE
 	return FALSE
 
 /**
@@ -1303,7 +1276,7 @@ TYPEINFO(/atom/movable)
  *
  * connect_diagonals 0 = no diagonal sprites, 1 = diagonal only if both adjacent cardinals are present, 2 = always allow diagonals
  */
-/atom/proc/get_connected_directions_bitflag(list/valid_atoms = list(), list/exceptions = list(), cross_areas = TRUE, connect_diagonal = 0)
+/atom/proc/get_connected_directions_bitflag(list/valid_atoms = list(), list/exceptions = list(), cross_areas = TRUE, connect_diagonal = 0, turf_only = FALSE)
 	var/ordir = null
 	var/connected_directions = 0
 	if (!valid_atoms || !islist(valid_atoms))
@@ -1312,7 +1285,7 @@ TYPEINFO(/atom/movable)
 	// cardinals first
 	for (var/dir in cardinal)
 		var/turf/CT = get_step(src, dir)
-		if (should_auto_connect(CT, valid_atoms, exceptions, cross_areas))
+		if (should_auto_connect(CT, valid_atoms, exceptions, cross_areas, turf_only))
 			connected_directions |= dir
 
 	if (connect_diagonal)
@@ -1321,7 +1294,7 @@ TYPEINFO(/atom/movable)
 			if (connect_diagonal < 2 && (ordir & connected_directions) != ordir)
 				continue
 			var/turf/OT = get_step(src, ordir)
-			if (should_auto_connect(OT, valid_atoms, exceptions, cross_areas))
+			if (should_auto_connect(OT, valid_atoms, exceptions, cross_areas, turf_only))
 				connected_directions |= 8 << i
 	return connected_directions
 
@@ -1425,3 +1398,26 @@ TYPEINFO(/atom/movable)
 	if (istype(target.loc, /atom/movable))
 		return src.is_that_in_this(target.loc)
 	return FALSE
+
+//Used for projectile bounces, override these for funny shaped objects like angled mirrors
+
+///Returns the x component of the surface normal of the atom relative to an incident direction
+/atom/proc/normal_x(incident_dir)
+	return incident_dir == WEST ? -1 : (incident_dir == EAST ?  1 : 0)
+
+///Returns the y component of the surface normal of the atom relative to an incident direction
+/atom/proc/normal_y(incident_dir)
+	return incident_dir == SOUTH ? -1 : (incident_dir == NORTH ?  1 : 0)
+
+///Should this atom emit particles when hit by a projectile, when the projectile is of the given type
+/atom/proc/does_impact_particles(var/kinetic_impact = TRUE)
+	return TRUE
+
+///Removes anything that is glued to this atom
+/atom/proc/unglue_attached_to()
+	var/atom/Aloc = isturf(src) ? src : src.loc
+	for(var/atom/movable/AM in Aloc)
+		var/datum/component/glued/glued_comp = AM.GetComponent(/datum/component/glued)
+		// possible idea for a future change: instead of direct deletion just decrease dries_up_time and only delete if <= current time
+		if(glued_comp?.glued_to == src && !isnull(glued_comp.glue_removal_time))
+			qdel(glued_comp)

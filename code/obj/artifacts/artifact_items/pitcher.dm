@@ -109,6 +109,8 @@
 			reagents.add_reagent("omnizine", 50)
 		if (prob(15))
 			reagents.add_reagent("mutagen", 30)
+		if (prob(5))
+			reagents.add_reagent("hyper_vomitium", 10)
 		if (prob(10))
 			reagents.add_reagent("omega_mutagen", 30)
 		if (prob(5))
@@ -140,11 +142,6 @@
 	attackby(obj/item/W, mob/user)
 		if (src.Artifact_attackby(W,user))
 			..()
-
-	attack(mob/target, mob/user, def_zone, is_special = FALSE, params = null)
-		. = ..()
-		if(.) // successfully made person drink
-			src.ArtifactFaultUsed(target)
 
 	examine()
 		return list(desc)

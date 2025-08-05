@@ -56,11 +56,6 @@
 		simsController.simsMotives -= src
 		..()
 
-	disposing()
-		if (hud)
-			qdel(hud)
-		..()
-
 	proc/updateHud()
 		var/change = 0
 		if (value > last_life_value)
@@ -215,6 +210,16 @@
 		icon_state = "social"
 		depletion_rate = 0.18
 		var/criminal = -1 //-1 unset, 0 law-abiding citizen, 1 traitor
+
+		New()
+			. = ..()
+
+			SPAWN(0)
+				src.holder?.owner?.ensure_listen_tree().AddListenEffect(LISTEN_EFFECT_SIMS_SOCIAL_MOTIVE)
+
+		disposing()
+			src.holder?.owner?.ensure_listen_tree().RemoveListenEffect(LISTEN_EFFECT_SIMS_SOCIAL_MOTIVE)
+			. = ..()
 
 		mayStandardDeplete()
 			if (..())
@@ -447,12 +452,7 @@
 	var/list/motives = list()
 	var/list/datum/simsHolder/simsHolders = list()
 	var/list/datum/simsMotive/simsMotives = list()
-
-#ifdef RP_MODE
 	var/provide_plumbobs = 0
-#else
-	var/provide_plumbobs = 1
-#endif
 
 	New()
 		..()
@@ -535,28 +535,28 @@
 		var/o = "<html><head><title>Motive Controls</title><style>"
 		o += "</style></head><body>"
 
-		o += {"<a href='?src=\ref[src];toggle_plum=1'>Plumbobs: [provide_plumbobs ? "On" : "Off"]</a><br>
+		o += {"<a href='byond://?src=\ref[src];toggle_plum=1'>Plumbobs: [provide_plumbobs ? "On" : "Off"]</a><br>
 
 				<h3>Profiles</h3>
 				<table style='font-size:80%'><tr>
-				<td><a href='?src=\ref[src];profile=ham'>Custom</a></td>
-				<td><a href='?src=\ref[src];profile=0.6'>RP Default(0.3)</a></td>
-				<td><a href='?src=\ref[src];profile=0.2'>V. Low (0.2)</a></td>
-				<td><a href='?src=\ref[src];profile=0.4'>Low (0.4)</a></td>
-				<td><a href='?src=\ref[src];profile=0.6'>Med-low (0.6)</a></td>
-				<td><a href='?src=\ref[src];profile=1'>Standard (1)</a></td>
-				<td><a href='?src=\ref[src];profile=1.5'>High (1.5)</a></td>
-				<td><a href='?src=\ref[src];profile=2'>Very High (2)</a></td>
-				<td><a href='?src=\ref[src];profile=4'>Doom (4)</a></td>
+				<td><a href='byond://?src=\ref[src];profile=ham'>Custom</a></td>
+				<td><a href='byond://?src=\ref[src];profile=0.6'>RP Default(0.3)</a></td>
+				<td><a href='byond://?src=\ref[src];profile=0.2'>V. Low (0.2)</a></td>
+				<td><a href='byond://?src=\ref[src];profile=0.4'>Low (0.4)</a></td>
+				<td><a href='byond://?src=\ref[src];profile=0.6'>Med-low (0.6)</a></td>
+				<td><a href='byond://?src=\ref[src];profile=1'>Standard (1)</a></td>
+				<td><a href='byond://?src=\ref[src];profile=1.5'>High (1.5)</a></td>
+				<td><a href='byond://?src=\ref[src];profile=2'>Very High (2)</a></td>
+				<td><a href='byond://?src=\ref[src];profile=4'>Doom (4)</a></td>
 				</tr></table>"}
 		o += "<table><tr><td><b>Name</b></td><td><b>Standard depletion rate</b></td><td><b>Gain rate</b></td><td>Drain rate</td></tr>"
 		for (var/T in motives)
 			var/datum/simsMotive/M = motives[T]
 			o += {"<tr>
 				<td><b>[M.name]</b></td>
-				<td><a href='?src=\ref[src];mot=\ref[M];rate=1'>[M.depletion_rate]</a>% per second</td>
-				<td><a href='?src=\ref[src];mot=\ref[M];gain=1'>[M.gain_rate]</a> ([M.gain_rate * 100]%)</td>
-				<td><a href='?src=\ref[src];mot=\ref[M];drain=1'>[M.drain_rate]</a> ([M.drain_rate * 100]%)</td>
+				<td><a href='byond://?src=\ref[src];mot=\ref[M];rate=1'>[M.depletion_rate]</a>% per second</td>
+				<td><a href='byond://?src=\ref[src];mot=\ref[M];gain=1'>[M.gain_rate]</a> ([M.gain_rate * 100]%)</td>
+				<td><a href='byond://?src=\ref[src];mot=\ref[M];drain=1'>[M.drain_rate]</a> ([M.drain_rate * 100]%)</td>
 				</tr>"}
 
 		o += "</table>"
@@ -590,16 +590,11 @@ var/global/datum/simsControl/simsController = new()
 		make_motives()
 			addMotive(/datum/simsMotive/hunger)
 			addMotive(/datum/simsMotive/hunger/thirst)
-			addMotive(/datum/simsMotive/hygiene)
-			//addMotive(/datum/simsMotive/bladder)
-			//addMotive(/datum/simsMotive/energy)
-			//addMotive(/datum/simsMotive/sanity)
 
 		wolf
 			make_motives()
 				addMotive(/datum/simsMotive/hunger/wolfy)
 				addMotive(/datum/simsMotive/hunger/thirst)
-				addMotive(/datum/simsMotive/hygiene)
 
 	New(var/mob/living/L)
 		..()
@@ -669,6 +664,12 @@ var/global/datum/simsControl/simsController = new()
 			return
 		motives[initial(M.name)] = M
 		M.holder = src
+
+	proc/removeMotive(var/name)
+		if((name in src.motives))
+			var/datum/simsMotive/S = src.motives[name]
+			src.motives.Remove(name)
+			qdel(S)
 
 	proc/getValue(var/name)
 		if (name in motives)

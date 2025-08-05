@@ -14,6 +14,10 @@
 	var/see_mentor_pms = 1
 	/// to make sure that they cant escape being shamecubed by just reconnecting
 	var/shamecubed = 0
+	/// have we cached player stats from the api
+	var/cached_round_stats = FALSE
+	/// have we fetched round stats from the api?
+	var/fetched_round_stats = FALSE
 	/// how many rounds (total) theyve declared ready and joined, null with to differentiate between not set and no participation
 	VAR_PRIVATE/rounds_participated = null
 	/// how many rounds (rp only) theyve declared ready and joined, null with to differentiate between not set and no participation
@@ -54,22 +58,18 @@
 	var/joined_names = list()
 	/// Antag tokens this person has, null until it's fetched
 	var/antag_tokens = null
+	/// Newbee Tutorial
+	var/datum/tutorial_base/regional/newbee/tutorial = null
 
-	/// sets up vars, caches player stats, adds by_type list entry for this datum
+	/// starts setup, adds by_type list entry for this datum
 	New(key)
 		..()
 		START_TRACKING
 		src.key = key
 		src.ckey = ckey(key)
 		src.tag = "player-[src.ckey]"
-		src.cloudSaves = new /datum/cloudSaves(src)
-
-		if (ckey(src.key) in mentors)
-			src.mentor = 1
-
-		if (src.key) //just a safety check!
-			src.cache_round_stats()
 		src.last_death_time = world.timeofday
+		src.cloudSaves = new /datum/cloudSaves(src)
 
 	/// removes by_type list entry for this datum, clears dangling references
 	disposing()
@@ -79,9 +79,15 @@
 			src.client = null
 		..()
 
+	/// stuff that should only be done when the client is known to be valid
+	proc/on_client_authenticated()
+		if (src.ckey in mentors) src.mentor = TRUE
+		if (!src.cached_round_stats) src.cache_round_stats()
+		SPAWN(0) src.cloudSaves.fetch()
+
 	/// Record a player login via the API. Sets player ID field for future API use
 	proc/record_login()
-		if (!roundId || !src.client || src.id) return
+		if (!roundId || !src.client) return
 		var/datum/apiModel/Tracked/PlayerResource/playerResponse
 		try
 			var/datum/apiRoute/players/login/playerLogin = new
@@ -92,7 +98,8 @@
 				src.client.computer_id,
 				src.client.byond_version,
 				src.client.byond_build,
-				roundId
+				roundId,
+				config.server_id
 			)
 			playerResponse = apiHandler.queryAPI(playerLogin)
 		catch (var/exception/e)
@@ -102,6 +109,7 @@
 			return
 
 		src.id = playerResponse.id
+		assign_goonhub_abilities(src.client.ckey, playerResponse.ToList())
 
 	/// queries api to cache stats so its only done once per player per round
 	proc/cache_round_stats()
@@ -110,24 +118,32 @@
 
 	/// blocking version of cache_round_stats, queries api to cache stats so its only done once per player per round (please update this proc when adding more player stat vars)
 	proc/cache_round_stats_blocking()
+		if (!src.ckey) return FALSE
+
 		var/datum/apiModel/Tracked/PlayerStatsResource/playerStats
 		try
 			var/datum/apiRoute/players/stats/get/getPlayerStats = new
 			getPlayerStats.queryParams = list("ckey" = src.ckey)
 			playerStats = apiHandler.queryAPI(getPlayerStats)
 		catch
+			src.fetched_round_stats = TRUE
 			return FALSE
 
 		src.rounds_participated_rp = text2num(playerStats.played_rp)
 		src.rounds_participated = text2num(playerStats.played) + src.rounds_participated_rp //the API counts these separately, but we want a combined number
 		src.rounds_seen_rp = text2num(playerStats.connected_rp)
 		src.rounds_seen = text2num(playerStats.connected) + src.rounds_seen_rp //the API counts these separately, but we want a combined number
-		src.last_seen = playerStats.latest_connection.created_at
+		src.last_seen = playerStats.latest_connection?.created_at
+		src.cached_round_stats = TRUE
+		src.fetched_round_stats = TRUE
 		return TRUE
 
 	proc/load_antag_tokens()
 		PRIVATE_PROC(TRUE) //call get_antag_tokens
 		. = TRUE
+		#ifdef BONUS_POINTS
+		antag_tokens = 99
+		#else
 		var/savefile/AT = LoadSavefile("data/AntagTokens.sav")
 		if (!AT)
 			antag_tokens = src.cloudSaves.getData( "antag_tokens" )
@@ -145,10 +161,11 @@
 		antag_tokens += text2num( src.cloudSaves.getData( "antag_tokens" ) || "0" )
 		if (src.cloudSaves.putData( "antag_tokens", antag_tokens ))
 			AT[ckey] << null
+		#endif
 
 	/// returns an assoc list of cached player stats (please update this proc when adding more player stat vars)
 	proc/get_round_stats(allow_blocking = FALSE)
-		if ((isnull(src.rounds_participated) || isnull(src.rounds_seen) || isnull(src.rounds_participated_rp) || isnull(src.rounds_seen_rp) || isnull(src.last_seen))) //if the stats havent been cached yet
+		if (!src.cached_round_stats) //if the stats havent been cached yet
 			if (allow_blocking) // whether or not we are OK with possibly sleeping the thread
 				if (!src.cache_round_stats_blocking())
 					return null
@@ -159,20 +176,20 @@
 
 	/// returns the number of rounds that the player has played by joining in at roundstart
 	proc/get_rounds_participated()
-		if (isnull(src.rounds_participated)) //if the stats havent been cached yet
+		if (!src.cached_round_stats) //if the stats havent been cached yet
 			if (!src.cache_round_stats_blocking()) //if trying to set them fails
 				return null
 		return src.rounds_participated
 
 	proc/get_rounds_participated_rp()
-		if (isnull(src.rounds_participated_rp)) //if the stats havent been cached yet
+		if (!src.cached_round_stats) //if the stats havent been cached yet
 			if (!src.cache_round_stats_blocking()) //if trying to set them fails
 				return null
 		return src.rounds_participated_rp
 
 	/// returns the number of rounds that the player has at least joined the lobby in
 	proc/get_rounds_seen()
-		if (isnull(src.rounds_seen)) //if the stats havent been cached yet
+		if (!src.cached_round_stats) //if the stats havent been cached yet
 			if (!src.cache_round_stats_blocking()) //if trying to set them fails
 				return null
 		return src.rounds_seen
